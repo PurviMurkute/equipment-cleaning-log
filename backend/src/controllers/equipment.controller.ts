@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { validate as uuidValidate } from "uuid";
 import {
   createEquipment,
   deleteEquipment,
@@ -7,16 +8,14 @@ import {
   updateEquipment,
   validateEquipmentStatus,
 } from "../services/equipment.service.js";
+import type {
+  CreateEquipmentRequestDto,
+  UpdateEquipmentRequestDto,
+} from "../dto/equipment.dto.js";
+import type { EquipmentIdParamsDto } from "../dto/request.dto.js";
 
-const uuidPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-function isStringParam(value: string | string[] | undefined): value is string {
-  return typeof value === "string";
-}
-
-function isValidUuid(value: string): boolean {
-  return uuidPattern.test(value);
+function hasValidUuid(id: string | undefined): id is string {
+  return typeof id === "string" && uuidValidate(id);
 }
 
 export async function listEquipment(_req: Request, res: Response) {
@@ -24,10 +23,13 @@ export async function listEquipment(_req: Request, res: Response) {
   res.json(equipment);
 }
 
-export async function getEquipment(req: Request, res: Response) {
+export async function getEquipment(
+  req: Request<EquipmentIdParamsDto>,
+  res: Response,
+) {
   const { id } = req.params;
 
-  if (!isStringParam(id) || !isValidUuid(id)) {
+  if (!hasValidUuid(id)) {
     return res.status(400).json({ message: "Invalid equipment id" });
   }
 
@@ -40,18 +42,17 @@ export async function getEquipment(req: Request, res: Response) {
   return res.json(equipment);
 }
 
-export async function createEquipmentHandler(req: Request, res: Response) {
-  const { name, code, status } = req.body as {
-    name?: unknown;
-    code?: unknown;
-    status?: unknown;
-  };
+export async function createEquipmentHandler(
+  req: Request<unknown, unknown, CreateEquipmentRequestDto>,
+  res: Response,
+) {
+  const { name, code, status } = req.body;
 
   if (typeof name !== "string" || typeof code !== "string") {
     return res.status(400).json({ message: "name and code are required" });
   }
 
-  let parsedStatus;
+  let parsedStatus: ReturnType<typeof validateEquipmentStatus>;
   try {
     parsedStatus = validateEquipmentStatus(status);
   } catch {
@@ -76,24 +77,18 @@ export async function createEquipmentHandler(req: Request, res: Response) {
   }
 }
 
-export async function updateEquipmentHandler(req: Request, res: Response) {
+export async function updateEquipmentHandler(
+  req: Request<EquipmentIdParamsDto, unknown, UpdateEquipmentRequestDto>,
+  res: Response,
+) {
   const { id } = req.params;
 
-  if (!isStringParam(id) || !isValidUuid(id)) {
+  if (!hasValidUuid(id)) {
     return res.status(400).json({ message: "Invalid equipment id" });
   }
 
-  const { name, code, status } = req.body as {
-    name?: unknown;
-    code?: unknown;
-    status?: unknown;
-  };
-
-  const payload: {
-    name?: string;
-    code?: string;
-    status?: "ACTIVE" | "RETIRED";
-  } = {};
+  const { name, code, status } = req.body;
+  const payload: UpdateEquipmentRequestDto = {};
 
   if (name !== undefined) {
     if (typeof name !== "string") {
@@ -135,10 +130,13 @@ export async function updateEquipmentHandler(req: Request, res: Response) {
   }
 }
 
-export async function deleteEquipmentHandler(req: Request, res: Response) {
+export async function deleteEquipmentHandler(
+  req: Request<EquipmentIdParamsDto>,
+  res: Response,
+) {
   const { id } = req.params;
 
-  if (!isStringParam(id) || !isValidUuid(id)) {
+  if (!hasValidUuid(id)) {
     return res.status(400).json({ message: "Invalid equipment id" });
   }
 

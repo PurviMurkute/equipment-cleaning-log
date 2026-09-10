@@ -1,27 +1,11 @@
 import pool from "../config/db.js";
-
-export type EquipmentStatus = "ACTIVE" | "RETIRED";
-
-export type EquipmentRow = {
-  id: string;
-  name: string;
-  code: string;
-  status: EquipmentStatus;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-export type CreateEquipmentInput = {
-  name: string;
-  code: string;
-  status?: EquipmentStatus;
-};
-
-export type UpdateEquipmentInput = {
-  name?: string;
-  code?: string;
-  status?: EquipmentStatus;
-};
+import { v4 as uuidv4 } from "uuid";
+import type {
+  CreateEquipmentRequestDto,
+  EquipmentDto,
+  UpdateEquipmentRequestDto,
+} from "../dto/equipment.dto.js";
+import type { EquipmentStatus } from "../dto/common.dto.js";
 
 const validStatuses: EquipmentStatus[] = ["ACTIVE", "RETIRED"];
 
@@ -41,7 +25,7 @@ export function validateEquipmentStatus(value: unknown): EquipmentStatus | undef
   return value;
 }
 
-export async function getAllEquipment(): Promise<EquipmentRow[]> {
+export async function getAllEquipment(): Promise<EquipmentDto[]> {
   const result = await pool.query(
     `
       SELECT
@@ -59,7 +43,7 @@ export async function getAllEquipment(): Promise<EquipmentRow[]> {
   return result.rows;
 }
 
-export async function getEquipmentById(id: string): Promise<EquipmentRow | null> {
+export async function getEquipmentById(id: string): Promise<EquipmentDto | null> {
   const result = await pool.query(
     `
       SELECT
@@ -78,11 +62,13 @@ export async function getEquipmentById(id: string): Promise<EquipmentRow | null>
   return result.rows[0] ?? null;
 }
 
-export async function createEquipment(input: CreateEquipmentInput): Promise<EquipmentRow> {
+export async function createEquipment(
+  input: CreateEquipmentRequestDto,
+): Promise<EquipmentDto> {
   const result = await pool.query(
     `
-      INSERT INTO "Equipment" ("name", "code", "status")
-      VALUES ($1, $2, $3)
+      INSERT INTO "Equipment" ("id", "name", "code", "status")
+      VALUES ($1, $2, $3, $4)
       RETURNING
         "id",
         "name",
@@ -91,7 +77,7 @@ export async function createEquipment(input: CreateEquipmentInput): Promise<Equi
         "createdAt",
         "updatedAt";
     `,
-    [input.name, input.code, input.status ?? "ACTIVE"],
+    [uuidv4(), input.name, input.code, input.status ?? "ACTIVE"],
   );
 
   return result.rows[0];
@@ -99,8 +85,8 @@ export async function createEquipment(input: CreateEquipmentInput): Promise<Equi
 
 export async function updateEquipment(
   id: string,
-  input: UpdateEquipmentInput,
-): Promise<EquipmentRow | null> {
+  input: UpdateEquipmentRequestDto,
+): Promise<EquipmentDto | null> {
   const updates: string[] = [];
   const values: unknown[] = [];
 
