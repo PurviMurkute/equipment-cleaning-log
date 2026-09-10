@@ -63,6 +63,45 @@ export async function listCleaningRecords(
   return response.data
 }
 
+export async function listCleaningRecordsForEquipmentIds(
+  equipmentIds: string[],
+  params?: { page?: number; limit?: number; status?: CleaningRecordStatus },
+) {
+  if (equipmentIds.length === 0) {
+    return []
+  }
+
+  const limit = params?.limit ?? 1000
+  const settled = await Promise.all(
+    equipmentIds.map(async (equipmentId) => {
+      const response = await listCleaningRecords(equipmentId, {
+        page: params?.page ?? 1,
+        limit,
+        status: params?.status,
+      })
+
+      return response.data
+    }),
+  )
+
+  return settled
+    .flat()
+    .sort((left, right) => new Date(right.cleanedAt).getTime() - new Date(left.cleanedAt).getTime())
+}
+
+export async function listAllCleaningRecords(
+  equipmentIds: string[],
+  params?: { limitPerEquipment?: number; status?: CleaningRecordStatus },
+) {
+  const data = await listCleaningRecordsForEquipmentIds(equipmentIds, {
+    page: 1,
+    limit: params?.limitPerEquipment ?? 1000,
+    status: params?.status,
+  })
+
+  return data
+}
+
 export async function createCleaningRecord(
   equipmentId: string,
   payload: CreateCleaningRecordPayload,

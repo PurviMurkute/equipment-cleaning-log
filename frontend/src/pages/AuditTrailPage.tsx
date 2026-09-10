@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
+import EquipmentSelect from '../components/EquipmentSelect'
 import ReusableTable, { type TableColumn } from '../components/reusable-table'
 import { listEquipment, type Equipment } from '../services/equipment'
-import { listCleaningRecords, type CleaningRecord } from '../services/cleaning-records'
+import { listAllCleaningRecords, listCleaningRecords, type CleaningRecord } from '../services/cleaning-records'
 import { getCleaningRecordAuditHistory, type AuditEntry } from '../services/audit'
-
-type AuditRow = AuditEntry
 
 const AuditTrailPage = () => {
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
@@ -12,33 +11,43 @@ const AuditTrailPage = () => {
   const [records, setRecords] = useState<CleaningRecord[]>([])
   const [selectedRecordId, setSelectedRecordId] = useState('')
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
-  const [equipmentLoading, setEquipmentLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
   const [recordsLoading, setRecordsLoading] = useState(false)
   const [auditLoading, setAuditLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const loadEquipment = async () => {
-      setEquipmentLoading(true)
+    let mounted = true
+
+    async function loadEquipment() {
+      setLoading(true)
       setError(null)
 
       try {
         const data = await listEquipment()
+        if (!mounted) return
+
         setEquipmentList(data)
-        setSelectedEquipmentId((current) => current || data[0]?.id || '')
       } catch (err) {
+        if (!mounted) return
         setError(err instanceof Error ? err.message : 'Failed to load equipment')
       } finally {
-        setEquipmentLoading(false)
+        if (mounted) setLoading(false)
       }
     }
 
     void loadEquipment()
+
+    return () => {
+      mounted = false
+    }
   }, [])
 
   useEffect(() => {
-    const loadRecords = async () => {
-      if (!selectedEquipmentId) {
+    let mounted = true
+
+    async function loadRecords() {
+      if (equipmentList.length === 0) {
         setRecords([])
         setSelectedRecordId('')
         setAuditEntries([])
@@ -49,26 +58,51 @@ const AuditTrailPage = () => {
       setError(null)
 
       try {
-        const data = await listCleaningRecords(selectedEquipmentId)
-        setRecords(data.data)
-        setSelectedRecordId((current) => {
-          if (current && data.data.some((record) => record.id === current)) {
-            return current
-          }
-          return data.data[0]?.id || ''
-        })
+        const data =
+          selectedEquipmentId === ''
+            ? await listAllCleaningRecords(equipmentList.map((item) => item.id), {
+                limitPerEquipment: 1000,
+              })
+            : (await listCleaningRecords(selectedEquipmentId, { page: 1, limit: 1000 })).data
+
+        if (!mounted) return
+        setRecords(data)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load cleaning records')
+        if (!mounted) return
+        setError(err instanceof Error ? err.message : 'Failed to load records')
+        setRecords([])
       } finally {
-        setRecordsLoading(false)
+        if (mounted) setRecordsLoading(false)
       }
     }
 
     void loadRecords()
-  }, [selectedEquipmentId])
+
+    return () => {
+      mounted = false
+    }
+  }, [equipmentList, selectedEquipmentId])
 
   useEffect(() => {
-    const loadAudit = async () => {
+    if (records.length === 0) {
+      setSelectedRecordId('')
+      setAuditEntries([])
+      return
+    }
+
+    setSelectedRecordId((current) => {
+      if (current && records.some((record) => record.id === current)) {
+        return current
+      }
+
+      return records[0]?.id || ''
+    })
+  }, [records])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadAuditHistory() {
       if (!selectedRecordId) {
         setAuditEntries([])
         return
@@ -79,21 +113,73 @@ const AuditTrailPage = () => {
 
       try {
         const data = await getCleaningRecordAuditHistory(selectedRecordId)
+        if (!mounted) return
+
         setAuditEntries(data.data)
       } catch (err) {
+        if (!mounted) return
         setError(err instanceof Error ? err.message : 'Failed to load audit history')
+        setAuditEntries([])
       } finally {
-        setAuditLoading(false)
+        if (mounted) setAuditLoading(false)
       }
     }
 
-    void loadAudit()
+    void loadAuditHistory()
+
+    return () => {
+      mounted = false
+    }
   }, [selectedRecordId])
 
-  const selectedEquipment = equipmentList.find((item) => item.id === selectedEquipmentId)
   const selectedRecord = records.find((item) => item.id === selectedRecordId)
+  const selectedEquipment = equipmentList.find((item) => item.id === selectedEquipmentId)
 
-  const columns: TableColumn<AuditRow>[] = [
+  const columns: TableColumn<CleaningRecord>[] = [
+    {
+      header: 'Cleaned At',
+      className: 'min-w-[160px]',
+      cell: (row) => <span className="text-xs text-slate-700">{formatDateTime(row.cleanedAt)}</span>,
+    },
+    {
+      header: 'Equipment',
+      className: 'min-w-[180px]',
+      cell: (row) => {
+        const equipment = equipmentList.find((item) => item.id === row.equipmentId)
+        return (
+          <div className="space-y-0.5">
+            <p className="text-xs font-semibold text-slate-900">{equipment?.code ?? 'Unknown'}</p>
+            <p className="text-xs text-slate-500">{equipment?.name ?? row.equipmentId}</p>
+          </div>
+        )
+      },
+    },
+    {
+      header: 'Cleaned By',
+      className: 'min-w-[150px]',
+      cell: (row) => <span className="text-xs text-slate-700">{row.cleanedBy}</span>,
+    },
+    {
+      header: 'Method',
+      className: 'min-w-[160px]',
+      cell: (row) => <span className="text-xs text-slate-700">{row.method}</span>,
+    },
+    {
+      header: 'Action',
+      className: 'w-[100px]',
+      cell: (row) => (
+        <button
+          type="button"
+          onClick={() => setSelectedRecordId(row.id)}
+          className="rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+        >
+          View
+        </button>
+      ),
+    },
+  ]
+
+  const auditColumns: TableColumn<AuditEntry>[] = [
     {
       header: 'Timestamp',
       className: 'min-w-[180px]',
@@ -121,110 +207,77 @@ const AuditTrailPage = () => {
     },
   ]
 
-  const metrics = useMemo(
-    () => [
-      {
-        label: 'Logged Events',
-        value: String(auditEntries.length),
-        suffix: 'field changes',
-        note: 'For selected cleaning record',
-      },
-      {
-        label: 'Selected Record',
-        value: selectedRecord ? shortId(selectedRecord.id) : '—',
-        suffix: selectedRecord ? selectedRecord.cleanedBy : 'No record',
-        note: 'Linked audit target',
-      },
-      {
-        label: 'Equipment',
-        value: selectedEquipment?.code ?? '—',
-        suffix: selectedEquipment?.name ?? 'No equipment',
-        note: 'Current context',
-      },
-    ],
-    [auditEntries.length, selectedRecord, selectedEquipment],
-  )
+  const selectedRecordMeta = useMemo(() => {
+    if (!selectedRecord) {
+      return null
+    }
+
+    return {
+      equipment: equipmentList.find((item) => item.id === selectedRecord.equipmentId) ?? null,
+      record: selectedRecord,
+    }
+  }, [equipmentList, selectedRecord])
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-            Audit Trail / Cleaning Record
-          </p>
-          <h2 className="mt-1 text-sm font-semibold tracking-tight text-slate-900">Audit Trail</h2>
-          <p className="mt-1 text-xs text-slate-600">
-            Live field-level audit history pulled from the backend.
-          </p>
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+          Audit Trail
+        </p>
+        <h2 className="text-sm font-semibold tracking-tight text-slate-900">Record History</h2>
+        <p className="text-xs text-slate-600">
+          Choose equipment, pick a record, and inspect its backend audit history.
+        </p>
+      </div>
+
+      {error ? (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">
+          {error}
         </div>
-
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          Refresh
-        </button>
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-3">
-        {metrics.map((metric) => (
-          <div key={metric.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {metric.label}
-            </p>
-            <div className="mt-3 flex items-end gap-2">
-              <span className="text-sm font-semibold text-slate-900">{metric.value}</span>
-              <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
-                {metric.suffix}
-              </span>
-            </div>
-            <p className="mt-2 text-xs text-slate-600">{metric.note}</p>
-          </div>
-        ))}
-      </div>
+      ) : null}
 
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            {equipmentList.map((equipment) => (
-              <button
-                key={equipment.id}
-                type="button"
-                onClick={() => setSelectedEquipmentId(equipment.id)}
-                className={[
-                  'rounded border px-2 py-0.5 text-xs font-semibold',
-                  selectedEquipmentId === equipment.id
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-slate-50 text-slate-600',
-                ].join(' ')}
-              >
-                {equipment.code}
-              </button>
-            ))}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Equipment
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {selectedEquipment ? selectedEquipment.name : 'All equipment'}
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {records.map((record) => (
-              <button
-                key={record.id}
-                type="button"
-                onClick={() => setSelectedRecordId(record.id)}
-                className={[
-                  'rounded border px-2 py-0.5 text-xs font-medium',
-                  selectedRecordId === record.id
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-slate-50 text-slate-600',
-                ].join(' ')}
-              >
-                {shortId(record.id)}
-              </button>
-            ))}
-          </div>
+          <EquipmentSelect
+            value={selectedEquipmentId}
+            options={equipmentList.map((equipment) => ({
+              id: equipment.id,
+              label: `${equipment.code} · ${equipment.name}`,
+            }))}
+            onChange={setSelectedEquipmentId}
+            className="w-full lg:w-[320px]"
+          />
         </div>
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+      <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Records</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Click View on a record to load its audit history.
+            </p>
+          </div>
+          <p className="text-xs text-slate-400">{recordsLoading ? 'Loading...' : `${records.length} total`}</p>
+        </div>
+
+        <ReusableTable
+          columns={columns}
+          data={records}
+          emptyState={loading || recordsLoading ? 'Loading records...' : 'No records found.'}
+        />
+      </section>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <h3 className="text-sm font-semibold text-slate-900">Audit History</h3>
@@ -233,42 +286,26 @@ const AuditTrailPage = () => {
             </span>
           </div>
 
-          {equipmentLoading || recordsLoading ? (
-            <div className="px-4 py-6 text-xs text-slate-500">Loading audit context...</div>
-          ) : error ? (
-            <div className="px-4 py-6 text-xs text-red-700">{error}</div>
-          ) : auditEntries.length > 0 ? (
-            <ReusableTable columns={columns} data={auditEntries} emptyState="No audit entries found." />
-          ) : (
-            <div className="px-4 py-6 text-xs text-slate-500">Select a record to view its audit history.</div>
-          )}
+          <ReusableTable
+            columns={auditColumns}
+            data={auditEntries}
+            emptyState={selectedRecordId ? 'No audit entries found.' : 'Select a record to view history.'}
+          />
         </section>
 
-        <aside className="space-y-4">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Selected Record
-            </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {selectedRecord ? shortId(selectedRecord.id) : 'No record selected'}
-            </p>
-            <div className="mt-3 space-y-2 text-xs text-slate-600">
-              <p>Cleaned by: {selectedRecord?.cleanedBy ?? '—'}</p>
-              <p>Method: {selectedRecord?.method ?? '—'}</p>
-              <p>Status: {selectedRecord ? selectedRecord.status : '—'}</p>
-            </div>
-          </section>
-
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Equipment Context
-            </p>
-            <div className="mt-3 space-y-2 text-xs text-slate-600">
-              <p>{selectedEquipment?.name ?? 'No equipment selected'}</p>
-              <p>{selectedEquipment?.code ?? '—'}</p>
-              <p>Audit entries are fetched live from the backend.</p>
-            </div>
-          </section>
+        <aside className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Selected Record
+          </p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {selectedRecordMeta ? shortId(selectedRecordMeta.record.id) : 'No record selected'}
+          </p>
+          <div className="mt-3 space-y-2 text-xs text-slate-600">
+            <p>Equipment: {selectedRecordMeta?.equipment?.name ?? '—'}</p>
+            <p>Cleaned by: {selectedRecordMeta?.record.cleanedBy ?? '—'}</p>
+            <p>Method: {selectedRecordMeta?.record.method ?? '—'}</p>
+            <p>Status: {selectedRecordMeta?.record.status ?? '—'}</p>
+          </div>
         </aside>
       </div>
     </div>

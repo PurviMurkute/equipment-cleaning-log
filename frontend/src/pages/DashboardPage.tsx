@@ -1,49 +1,38 @@
 import { useEffect, useMemo, useState } from 'react'
+import EquipmentSelect from '../components/EquipmentSelect'
 import ReusableTable, { type TableColumn } from '../components/reusable-table'
 import { listEquipment, type Equipment } from '../services/equipment'
 import {
+  listAllCleaningRecords,
   listCleaningRecords,
   type CleaningRecord,
-  type CleaningRecordPagination,
 } from '../services/cleaning-records'
-
-const DASHBOARD_RECORD_LIMIT = 5
 
 const DashboardPage = () => {
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('')
   const [records, setRecords] = useState<CleaningRecord[]>([])
-  const [pagination, setPagination] = useState<CleaningRecordPagination | null>(null)
-  const [loadingEquipment, setLoadingEquipment] = useState(true)
-  const [loadingRecords, setLoadingRecords] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [recordsLoading, setRecordsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let mounted = true
 
     async function loadEquipment() {
-      setLoadingEquipment(true)
+      setLoading(true)
       setError(null)
 
       try {
         const data = await listEquipment()
-
-        if (!mounted) {
-          return
-        }
+        if (!mounted) return
 
         setEquipmentList(data)
-        setSelectedEquipmentId((current) => current || data[0]?.id || '')
-      } catch (loadError) {
-        if (!mounted) {
-          return
-        }
-
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load dashboard data.')
+      } catch (err) {
+        if (!mounted) return
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard')
       } finally {
-        if (mounted) {
-          setLoadingEquipment(false)
-        }
+        if (mounted) setLoading(false)
       }
     }
 
@@ -55,42 +44,33 @@ const DashboardPage = () => {
   }, [])
 
   useEffect(() => {
-    if (!selectedEquipmentId) {
-      setRecords([])
-      setPagination(null)
-      return
-    }
-
     let mounted = true
 
     async function loadRecords() {
-      setLoadingRecords(true)
+      if (equipmentList.length === 0) {
+        setRecords([])
+        return
+      }
+
+      setRecordsLoading(true)
       setError(null)
 
       try {
-        const response = await listCleaningRecords(selectedEquipmentId, {
-          page: 1,
-          limit: DASHBOARD_RECORD_LIMIT,
-        })
+        const data =
+          selectedEquipmentId === ''
+            ? await listAllCleaningRecords(equipmentList.map((equipment) => equipment.id), {
+                limitPerEquipment: 1000,
+              })
+            : (await listCleaningRecords(selectedEquipmentId, { page: 1, limit: 1000 })).data
 
-        if (!mounted) {
-          return
-        }
-
-        setRecords(response.data)
-        setPagination(response.pagination)
-      } catch (loadError) {
-        if (!mounted) {
-          return
-        }
-
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load dashboard data.')
+        if (!mounted) return
+        setRecords(data)
+      } catch (err) {
+        if (!mounted) return
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard')
         setRecords([])
-        setPagination(null)
       } finally {
-        if (mounted) {
-          setLoadingRecords(false)
-        }
+        if (mounted) setRecordsLoading(false)
       }
     }
 
@@ -99,59 +79,51 @@ const DashboardPage = () => {
     return () => {
       mounted = false
     }
-  }, [selectedEquipmentId])
+  }, [equipmentList, selectedEquipmentId])
 
-  const selectedEquipment = useMemo(
-    () => equipmentList.find((item) => item.id === selectedEquipmentId) ?? null,
-    [equipmentList, selectedEquipmentId],
-  )
+  const visibleEquipment = selectedEquipmentId
+    ? equipmentList.find((item) => item.id === selectedEquipmentId) ?? null
+    : null
 
-  const activeEquipmentCount = useMemo(
-    () => equipmentList.filter((item) => item.status === 'ACTIVE').length,
-    [equipmentList],
-  )
-
-  const latestRecord = records[0] ?? null
-
-  const dashboardStats = useMemo(
+  const summary = useMemo(
     () => [
       {
-        label: 'Total equipment',
+        label: 'Equipment',
         value: equipmentList.length.toString(),
-        note: loadingEquipment ? 'Loading from backend' : 'From /api/equipment',
+        note: 'From backend',
       },
       {
-        label: 'Active equipment',
-        value: activeEquipmentCount.toString(),
-        note: selectedEquipment ? `${selectedEquipment.code} selected` : 'No equipment selected',
+        label: 'Selected scope',
+        value: visibleEquipment ? visibleEquipment.code : 'All',
+        note: visibleEquipment ? visibleEquipment.name : 'All equipment',
       },
       {
-        label: 'Recent records',
-        value: pagination?.total?.toString() ?? '0',
-        note: `Showing ${records.length} most recent`,
-      },
-      {
-        label: 'Latest cleaned at',
-        value: latestRecord ? formatDateTime(latestRecord.cleanedAt) : '—',
-        note: latestRecord ? latestRecord.status : 'No record selected',
+        label: 'Records',
+        value: records.length.toString(),
+        note: 'Live cleaning logs',
       },
     ],
-    [
-      activeEquipmentCount,
-      equipmentList.length,
-      latestRecord,
-      loadingEquipment,
-      pagination?.total,
-      records.length,
-      selectedEquipment,
-    ],
+    [equipmentList.length, records.length, visibleEquipment],
   )
 
-  const recordColumns: TableColumn<CleaningRecord>[] = [
+  const columns: TableColumn<CleaningRecord>[] = [
     {
       header: 'Cleaned At',
       className: 'min-w-[160px]',
       cell: (row) => <span className="text-xs text-slate-700">{formatDateTime(row.cleanedAt)}</span>,
+    },
+    {
+      header: 'Equipment',
+      className: 'min-w-[180px]',
+      cell: (row) => {
+        const equipment = equipmentList.find((item) => item.id === row.equipmentId)
+        return (
+          <div className="space-y-0.5">
+            <p className="text-xs font-semibold text-slate-900">{equipment?.code ?? 'Unknown'}</p>
+            <p className="text-xs text-slate-500">{equipment?.name ?? row.equipmentId}</p>
+          </div>
+        )
+      },
     },
     {
       header: 'Cleaned By',
@@ -171,14 +143,12 @@ const DashboardPage = () => {
   ]
 
   return (
-    <div className="grid gap-4">
+    <div className="space-y-4">
       <div className="flex flex-col gap-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Dashboard
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Dashboard</p>
         <h2 className="text-sm font-semibold tracking-tight text-slate-900">Overview</h2>
         <p className="text-xs text-slate-600">
-          This view is derived from the existing backend equipment and cleaning-record APIs.
+          Pick an equipment from the dropdown to load its records, or keep All equipment selected.
         </p>
       </div>
 
@@ -188,81 +158,54 @@ const DashboardPage = () => {
         </div>
       ) : null}
 
-      <div className="grid gap-3 xl:grid-cols-4">
-        {dashboardStats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              {stat.label}
-            </p>
-            <p className="mt-3 text-sm font-semibold text-slate-900">{stat.value}</p>
-            <p className="mt-2 text-xs text-slate-500">{stat.note}</p>
-          </div>
-        ))}
-      </div>
-
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
-              Equipment context
+              Equipment
             </p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">
-              {selectedEquipment ? selectedEquipment.name : 'Select equipment'}
-            </p>
-            <p className="mt-1 text-xs text-slate-600">
-              {selectedEquipment
-                ? `${selectedEquipment.code} · ${selectedEquipment.status}`
-                : 'No equipment available yet.'}
-            </p>
+            <p className="mt-1 text-xs text-slate-600">Select what you want to view.</p>
           </div>
 
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-            {equipmentList.map((equipment) => {
-              const active = equipment.id === selectedEquipmentId
-
-              return (
-                <button
-                  key={equipment.id}
-                  type="button"
-                  onClick={() => setSelectedEquipmentId(equipment.id)}
-                  className={[
-                    'shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition',
-                    active
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
-                  ].join(' ')}
-                >
-                  {equipment.code}
-                </button>
-              )
-            })}
-          </div>
+          <EquipmentSelect
+            value={selectedEquipmentId}
+            options={equipmentList.map((equipment) => ({
+              id: equipment.id,
+              label: `${equipment.code} · ${equipment.name}`,
+            }))}
+            onChange={setSelectedEquipmentId}
+            className="w-full lg:w-[320px]"
+          />
         </div>
       </section>
+
+      <div className="grid gap-3 xl:grid-cols-3">
+        {summary.map((item) => (
+          <div key={item.label} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+              {item.label}
+            </p>
+            <p className="mt-3 text-sm font-semibold text-slate-900">{item.value}</p>
+            <p className="mt-2 text-xs text-slate-500">{item.note}</p>
+          </div>
+        ))}
+      </div>
 
       <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Recent cleaning records</h3>
             <p className="mt-1 text-xs text-slate-500">
-              {selectedEquipment
-                ? `Latest ${DASHBOARD_RECORD_LIMIT} records for ${selectedEquipment.code}`
-                : 'Choose an equipment item to see records'}
+              {visibleEquipment ? visibleEquipment.name : 'All equipment'}
             </p>
           </div>
-          <p className="text-xs text-slate-400">
-            {loadingRecords ? 'Loading...' : pagination ? `${pagination.total} total` : ''}
-          </p>
+          <p className="text-xs text-slate-400">{recordsLoading ? 'Loading...' : `${records.length} total`}</p>
         </div>
 
         <ReusableTable
-          columns={recordColumns}
-          data={records}
-          emptyState={
-            loadingEquipment || loadingRecords
-              ? 'Loading records...'
-              : 'No cleaning records found for the selected equipment.'
-          }
+          columns={columns}
+          data={records.slice(0, 5)}
+          emptyState={loading || recordsLoading ? 'Loading records...' : 'No cleaning records found.'}
         />
       </section>
     </div>
@@ -292,18 +235,11 @@ function StatusPill({ status }: { status: CleaningRecord['status'] }) {
 
 function formatDateTime(value: string) {
   const date = new Date(value)
-
   if (Number.isNaN(date.getTime())) {
     return value
   }
 
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
+  return date.toLocaleString()
 }
 
 export default DashboardPage
