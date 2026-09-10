@@ -10,15 +10,24 @@ import {
   listCleaningRecords,
   updateCleaningRecord,
   type CleaningRecord,
+  type CleaningRecordPagination,
+  type CleaningRecordStatus,
 } from '../services/cleaning-records'
 import { type CleaningRecordFormValues } from '../components/cleaning-records/CleaningRecordFormDialog'
+
+const PAGE_SIZE = 5
+const ALL_EQUIPMENT_VALUE = ''
 
 const CleaningRecordsPage = () => {
   const [equipmentList, setEquipmentList] = useState<Equipment[]>([])
   const [selectedEquipmentId, setSelectedEquipmentId] = useState('')
+  const [statusFilter, setStatusFilter] = useState<CleaningRecordStatus | 'ALL'>('ALL')
+  const [page, setPage] = useState(1)
   const [records, setRecords] = useState<CleaningRecord[]>([])
+  const [pagination, setPagination] = useState<CleaningRecordPagination | null>(null)
   const [loading, setLoading] = useState(true)
   const [recordsLoading, setRecordsLoading] = useState(false)
+  const [refreshTick, setRefreshTick] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [editingRecord, setEditingRecord] = useState<CleaningRecord | null>(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -32,14 +41,20 @@ const CleaningRecordsPage = () => {
 
       try {
         const data = await listEquipment()
-        if (!mounted) return
+        if (!mounted) {
+          return
+        }
 
         setEquipmentList(data)
       } catch (err) {
-        if (!mounted) return
+        if (!mounted) {
+          return
+        }
         setError(err instanceof Error ? err.message : 'Failed to load equipment')
       } finally {
-        if (mounted) setLoading(false)
+        if (mounted) {
+          setLoading(false)
+        }
       }
     }
 
@@ -56,6 +71,7 @@ const CleaningRecordsPage = () => {
     async function loadRecords() {
       if (equipmentList.length === 0) {
         setRecords([])
+        setPagination(null)
         return
       }
 
@@ -63,21 +79,57 @@ const CleaningRecordsPage = () => {
       setError(null)
 
       try {
-        const data =
-          selectedEquipmentId === ''
-            ? await listAllCleaningRecords(equipmentList.map((item) => item.id), {
-                limitPerEquipment: 1000,
-              })
-            : (await listCleaningRecords(selectedEquipmentId, { page: 1, limit: 1000 })).data
+        const filterStatus = statusFilter === 'ALL' ? undefined : statusFilter
 
-        if (!mounted) return
-        setRecords(data)
+        if (selectedEquipmentId === ALL_EQUIPMENT_VALUE) {
+          const allRecords = await listAllCleaningRecords(
+            equipmentList.map((item) => item.id),
+            { status: filterStatus, limitPerEquipment: 1000 },
+          )
+
+          if (!mounted) {
+            return
+          }
+
+          const total = allRecords.length
+          const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+          const safePage = Math.min(page, totalPages)
+          const startIndex = (safePage - 1) * PAGE_SIZE
+          const visibleRecords = allRecords.slice(startIndex, startIndex + PAGE_SIZE)
+
+          setRecords(visibleRecords)
+          setPagination({
+            page: safePage,
+            limit: PAGE_SIZE,
+            total,
+            totalPages,
+          })
+        } else {
+          const response = await listCleaningRecords(selectedEquipmentId, {
+            page,
+            limit: PAGE_SIZE,
+            status: filterStatus,
+          })
+
+          if (!mounted) {
+            return
+          }
+
+          setRecords(response.data)
+          setPagination(response.pagination)
+        }
       } catch (err) {
-        if (!mounted) return
+        if (!mounted) {
+          return
+        }
+
         setError(err instanceof Error ? err.message : 'Failed to load cleaning records')
         setRecords([])
+        setPagination(null)
       } finally {
-        if (mounted) setRecordsLoading(false)
+        if (mounted) {
+          setRecordsLoading(false)
+        }
       }
     }
 
@@ -86,7 +138,7 @@ const CleaningRecordsPage = () => {
     return () => {
       mounted = false
     }
-  }, [equipmentList, selectedEquipmentId])
+  }, [equipmentList, page, refreshTick, selectedEquipmentId, statusFilter])
 
   const visibleEquipment = selectedEquipmentId
     ? equipmentList.find((item) => item.id === selectedEquipmentId) ?? null
@@ -158,7 +210,10 @@ const CleaningRecordsPage = () => {
       status: payload.status,
       changedBy: payload.changedBy.trim(),
     })
+
     setSelectedEquipmentId(payload.equipmentId)
+    setPage(1)
+    setRefreshTick((current) => current + 1)
   }
 
   const handleUpdate = async (payload: CleaningRecordFormValues) => {
@@ -177,6 +232,7 @@ const CleaningRecordsPage = () => {
 
     setEditOpen(false)
     setEditingRecord(null)
+    setRefreshTick((current) => current + 1)
   }
 
   const initialEditValues: CleaningRecordFormValues | null = editingRecord
@@ -191,6 +247,9 @@ const CleaningRecordsPage = () => {
       }
     : null
 
+  const currentPage = pagination?.page ?? page
+  const totalPages = pagination?.totalPages ?? 1
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
@@ -199,7 +258,7 @@ const CleaningRecordsPage = () => {
         </p>
         <h2 className="text-sm font-semibold tracking-tight text-slate-900">Record Management</h2>
         <p className="text-xs text-slate-600">
-          Use the dropdown to switch equipment. Add and edit records stay connected to the backend.
+          Use the equipment dropdown, status filter, and pagination controls to navigate live records.
         </p>
       </div>
 
@@ -223,13 +282,44 @@ const CleaningRecordsPage = () => {
           <EquipmentSelect
             value={selectedEquipmentId}
             options={equipmentOptions}
-            onChange={setSelectedEquipmentId}
+            onChange={(value) => {
+              setSelectedEquipmentId(value)
+              setPage(1)
+            }}
             className="w-full lg:w-[320px]"
           />
-          <AddCleaningRecordDialog
-            equipmentOptions={equipmentOptions}
-            onCreate={handleCreate}
-          />
+          <AddCleaningRecordDialog equipmentOptions={equipmentOptions} onCreate={handleCreate} />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          {(['ALL', 'PENDING', 'VERIFIED'] as const).map((status) => (
+            <button
+              key={status}
+              type="button"
+              onClick={() => {
+                setStatusFilter(status)
+                setPage(1)
+              }}
+              className={[
+                'rounded border px-2 py-0.5 text-xs font-semibold',
+                statusFilter === status
+                  ? 'border-slate-900 bg-slate-900 text-white'
+                  : 'border-slate-200 bg-slate-50 text-slate-600',
+              ].join(' ')}
+            >
+              {status === 'ALL' ? 'All' : status}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+          <span>•</span>
+          <span>{pagination?.total ?? 0} total</span>
         </div>
       </section>
 
@@ -241,7 +331,9 @@ const CleaningRecordsPage = () => {
               {selectedEquipmentId ? 'Filtered by equipment' : 'All equipment'}
             </p>
           </div>
-          <p className="text-xs text-slate-400">{recordsLoading ? 'Loading...' : `${records.length} total`}</p>
+          <p className="text-xs text-slate-400">
+            {recordsLoading ? 'Loading...' : `${records.length} shown`}
+          </p>
         </div>
 
         <ReusableTable
@@ -249,6 +341,32 @@ const CleaningRecordsPage = () => {
           data={records}
           emptyState={loading || recordsLoading ? 'Loading records...' : 'No cleaning records found.'}
         />
+
+        <div className="flex flex-col gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-slate-500">
+            {pagination
+              ? `Showing ${records.length} of ${pagination.total} records`
+              : 'No pagination data available'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={recordsLoading || currentPage <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={recordsLoading || currentPage >= totalPages}
+              onClick={() => setPage((current) => current + 1)}
+              className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </section>
 
       {initialEditValues ? (
