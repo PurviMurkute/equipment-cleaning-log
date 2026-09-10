@@ -47,25 +47,6 @@ function ClockIcon(_props: { active?: boolean }) {
   )
 }
 
-function SettingsIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
-      <path d="M6.3 2.7a1.5 1.5 0 0 1 3.4 0l.15.9a4.9 4.9 0 0 1 1.17.68l.86-.34a1.5 1.5 0 0 1 1.88.84l.72 1.44a1.5 1.5 0 0 1-.56 1.96l-.76.53c.03.2.04.4.04.6s-.01.4-.04.6l.76.53a1.5 1.5 0 0 1 .56 1.96l-.72 1.44a1.5 1.5 0 0 1-1.88.84l-.86-.34c-.35.27-.74.5-1.17.68l-.15.9a1.5 1.5 0 0 1-3.4 0l-.15-.9a4.9 4.9 0 0 1-1.17-.68l-.86.34a1.5 1.5 0 0 1-1.88-.84L1.2 12.26a1.5 1.5 0 0 1 .56-1.96l.76-.53A5.9 5.9 0 0 1 2.48 9c0-.2.01-.4.04-.6l-.76-.53a1.5 1.5 0 0 1-.56-1.96l.72-1.44a1.5 1.5 0 0 1 1.88-.84l.86.34c.35-.27.74-.5 1.17-.68l.15-.9Z" stroke="currentColor" strokeWidth="1.1" />
-      <circle cx="8" cy="8" r="1.9" stroke="currentColor" strokeWidth="1.1" />
-    </svg>
-  )
-}
-
-function LogoutIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
-      <path d="M6 3.5H4.5A1.5 1.5 0 0 0 3 5v6A1.5 1.5 0 0 0 4.5 12.5H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M8.5 11 11 8.5 8.5 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10.75 8.5H6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
 const Sidebar = () => {
   return (
     <aside className="flex h-full w-full flex-col bg-[#f8f8f6] text-slate-900">
@@ -79,17 +60,11 @@ const Sidebar = () => {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold tracking-[-0.02em] text-slate-900">CleanTrack</p>
-            <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              GMP V2.4
-            </span>
           </div>
         </div>
       </div>
 
       <nav className="flex-1 px-3 py-4">
-        <p className="px-2 pb-3 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-          Compliance Core
-        </p>
         <ul className="space-y-1">
           {navItems.map((item) => (
             <li key={item.label}>
@@ -118,33 +93,6 @@ const Sidebar = () => {
           ))}
         </ul>
       </nav>
-
-      <div className="mt-auto border-t border-slate-200 px-3 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            className="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
-          >
-            Site - Injectable
-          </button>
-          <div className="flex items-center gap-2 text-slate-500">
-            <button
-              type="button"
-              aria-label="Settings"
-              className="flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-slate-100 hover:text-slate-900"
-            >
-              <SettingsIcon />
-            </button>
-            <button
-              type="button"
-              aria-label="Sign out"
-              className="flex h-7 w-7 items-center justify-center rounded-md transition hover:bg-slate-100 hover:text-slate-900"
-            >
-              <LogoutIcon />
-            </button>
-          </div>
-        </div>
-      </div>
     </aside>
   )
 }
