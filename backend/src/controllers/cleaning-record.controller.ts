@@ -3,15 +3,18 @@ import { validate as uuidValidate } from "uuid";
 import {
   createCleaningRecord,
   equipmentExists,
+  getCleaningRecordAuditHistory,
+  getCleaningRecordById,
   getCleaningRecordsByEquipment,
   updateCleaningRecord,
   validateCleaningRecordStatus,
 } from "../services/cleaning-record.service.js";
 import type {
-  CleaningRecordDto,
   CreateCleaningRecordRequestDto,
   UpdateCleaningRecordRequestDto,
 } from "../dto/cleaning-record.dto.js";
+import type { CleaningRecordAuditHistoryResponseDto } from "../dto/audit.dto.js";
+import type { CleaningRecordStatus } from "../dto/common.dto.js";
 import type {
   CleaningRecordIdParamsDto,
   CleaningRecordListQueryDto,
@@ -61,7 +64,11 @@ export async function createCleaningRecordHandler(
     return res.status(400).json({ message: "notes must be a string" });
   }
 
-  let parsedStatus;
+  if (req.body.changedBy !== undefined && typeof req.body.changedBy !== "string") {
+    return res.status(400).json({ message: "changedBy must be a string" });
+  }
+
+  let parsedStatus: CleaningRecordStatus | undefined;
   try {
     parsedStatus = validateCleaningRecordStatus(status);
   } catch {
@@ -80,6 +87,7 @@ export async function createCleaningRecordHandler(
       method,
       notes,
       status: parsedStatus,
+      changedBy: req.body.changedBy,
     });
 
     return res.status(201).json(cleaningRecord);
@@ -113,7 +121,7 @@ export async function listCleaningRecordsHandler(
   const limit = parsePositiveInteger(req.query.limit, 10);
   const statusQuery = req.query.status;
 
-  let status: CleaningRecordDto["status"] | undefined;
+  let status: CleaningRecordStatus | undefined;
   if (statusQuery !== undefined) {
     try {
       status = validateCleaningRecordStatus(statusQuery);
@@ -186,6 +194,13 @@ export async function updateCleaningRecordHandler(
     payload.notes = notes;
   }
 
+  if (req.body.changedBy !== undefined) {
+    if (typeof req.body.changedBy !== "string") {
+      return res.status(400).json({ message: "changedBy must be a string" });
+    }
+    payload.changedBy = req.body.changedBy;
+  }
+
   if (status !== undefined) {
     try {
       payload.status = validateCleaningRecordStatus(status);
@@ -204,6 +219,31 @@ export async function updateCleaningRecordHandler(
     return res.json(cleaningRecord);
   } catch (error) {
     console.error("Update cleaning record failed:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+export async function getCleaningRecordAuditHistoryHandler(
+  req: Request<CleaningRecordIdParamsDto>,
+  res: Response,
+) {
+  const { id } = req.params;
+
+  if (!hasValidUuid(id)) {
+    return res.status(400).json({ message: "Invalid cleaning record id" });
+  }
+
+  const record = await getCleaningRecordById(id);
+  if (!record) {
+    return res.status(404).json({ message: "Cleaning record not found" });
+  }
+
+  try {
+    const data = await getCleaningRecordAuditHistory(id);
+    const response: CleaningRecordAuditHistoryResponseDto = { data };
+    return res.json(response);
+  } catch (error) {
+    console.error("Get cleaning record audit history failed:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 }

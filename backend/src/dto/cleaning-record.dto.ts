@@ -18,6 +18,7 @@ export type CreateCleaningRecordRequestDto = {
   method: string;
   notes?: string;
   status?: CleaningRecordStatus;
+  changedBy?: string;
 };
 
 export type UpdateCleaningRecordRequestDto = {
@@ -26,6 +27,7 @@ export type UpdateCleaningRecordRequestDto = {
   method?: string;
   notes?: string | null;
   status?: CleaningRecordStatus;
+  changedBy?: string;
 };
 
 export type CleaningRecordListResponseDto = {
