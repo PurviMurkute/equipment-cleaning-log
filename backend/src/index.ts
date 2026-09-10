@@ -1,17 +1,7 @@
-import express from "express";
 import "dotenv/config";
-import cors from "cors";
+import app from "./app.js";
 import pool from "./config/db.js";
-import equipmentRoutes from "./routes/equipment.routes.js";
-import cleaningRecordRoutes from "./routes/cleaning-record.routes.js";
-
-const app = express();
 const PORT = process.env.PORT || 5001;
-
-app.use(cors());
-app.use(express.json());
-app.use("/api/equipment", equipmentRoutes);
-app.use("/api", cleaningRecordRoutes);
 
 const startServer = async () => {
   try {
