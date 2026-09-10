@@ -8,13 +8,13 @@ type CleaningRecordPayload = CleaningRecordFormValues
 
 type AddCleaningRecordDialogProps = {
   equipmentOptions: EquipmentOption[]
-  defaultEquipmentId?: string
   onCreate?: (payload: CleaningRecordPayload) => Promise<void> | void
 }
 
-const getInitialForm = (equipmentOptions: EquipmentOption[], defaultEquipmentId?: string) => ({
-  equipmentId: defaultEquipmentId ?? equipmentOptions[0]?.id ?? '',
+const getInitialForm = () => ({
+  equipmentId: '',
   cleanedBy: '',
+  changedBy: '',
   cleanedAt: '',
   method: '',
   notes: '',
@@ -23,7 +23,6 @@ const getInitialForm = (equipmentOptions: EquipmentOption[], defaultEquipmentId?
 
 const AddCleaningRecordDialog = ({
   equipmentOptions,
-  defaultEquipmentId,
   onCreate,
 }: AddCleaningRecordDialogProps) => {
   const [open, setOpen] = useState(false)
@@ -46,7 +45,7 @@ const AddCleaningRecordDialog = ({
         submitLabel="Create Record"
         equipmentOptions={equipmentOptions}
         showEquipmentSelect
-        initialValues={getInitialForm(equipmentOptions, defaultEquipmentId)}
+        initialValues={getInitialForm()}
         onSubmit={async (payload) => {
           await onCreate?.(payload)
         }}

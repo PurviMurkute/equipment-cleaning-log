@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
 import type { CleaningRecordStatus } from '../../services/cleaning-records'
 
 type EquipmentOption = {
@@ -23,6 +22,7 @@ type CleaningRecordFormValues = {
   method: string
   notes: string
   status: CleaningRecordStatus
+  changedBy: string
 }
 
 type CleaningRecordFormDialogProps = {
@@ -54,16 +54,12 @@ function CleaningRecordFormDialog({
   onSubmit,
 }: CleaningRecordFormDialogProps) {
   const [form, setForm] = useState<CleaningRecordFormValues>(initialValues)
-  const [statusOpen, setStatusOpen] = useState(false)
-  const [equipmentOpen, setEquipmentOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (open) {
       setForm(initialValues)
     } else {
-      setStatusOpen(false)
-      setEquipmentOpen(false)
       setIsSubmitting(false)
     }
   }, [initialValues, open])
@@ -72,6 +68,7 @@ function CleaningRecordFormDialog({
     form.cleanedBy.trim() === '' ||
     form.cleanedAt.trim() === '' ||
     form.method.trim() === '' ||
+    form.changedBy.trim() === '' ||
     (showEquipmentSelect && form.equipmentId.trim() === '') ||
     isSubmitting
 
@@ -92,6 +89,7 @@ function CleaningRecordFormDialog({
         method: form.method.trim(),
         notes: form.notes.trim(),
         status: form.status,
+        changedBy: form.changedBy.trim(),
       })
       onOpenChange(false)
     } finally {
@@ -110,42 +108,25 @@ function CleaningRecordFormDialog({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {showEquipmentSelect ? (
             <div className="space-y-2">
-              <label className="text-xs font-medium text-slate-700">Equipment</label>
-              <Popover open={equipmentOpen} onOpenChange={setEquipmentOpen}>
-                <div className="relative">
-                  <PopoverTrigger
-                    onClick={() => setEquipmentOpen((current) => !current)}
-                    className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-left text-xs text-slate-700 transition hover:bg-slate-100"
-                  >
-                    <span>{equipmentOptions.find((item) => item.id === form.equipmentId)?.label ?? 'Select equipment'}</span>
-                    <span className="text-slate-400">▾</span>
-                  </PopoverTrigger>
-
-                  <PopoverContent className="min-w-[280px] p-1" align="start" sideOffset={6}>
-                    <div className="space-y-1">
-                      {equipmentOptions.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onClick={() => {
-                            setForm((current) => ({ ...current, equipmentId: option.id }))
-                            setEquipmentOpen(false)
-                          }}
-                          className={[
-                            'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs transition',
-                            form.equipmentId === option.id
-                              ? 'bg-slate-900 text-white'
-                              : 'text-slate-700 hover:bg-slate-100',
-                          ].join(' ')}
-                        >
-                          <span>{option.label}</span>
-                          {form.equipmentId === option.id ? <span>✓</span> : null}
-                        </button>
-                      ))}
-                    </div>
-                  </PopoverContent>
-                </div>
-              </Popover>
+              <label htmlFor="cleaning-equipment" className="text-xs font-medium text-slate-700">
+                Equipment
+              </label>
+              <select
+                id="cleaning-equipment"
+                value={form.equipmentId}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, equipmentId: event.target.value }))
+                }
+                className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-slate-300 focus:outline-none"
+                required
+              >
+                <option value="">Select equipment</option>
+                {equipmentOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           ) : null}
 
@@ -161,6 +142,21 @@ function CleaningRecordFormDialog({
                   setForm((current) => ({ ...current, cleanedBy: event.target.value }))
                 }
                 placeholder="John Smith"
+                className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="changed-by" className="text-xs font-medium text-slate-700">
+                Changed By
+              </label>
+              <input
+                id="changed-by"
+                value={form.changedBy}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, changedBy: event.target.value }))
+                }
+                placeholder="QA Lead"
                 className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 placeholder:text-slate-400 focus:border-slate-300 focus:outline-none"
               />
             </div>
@@ -213,40 +209,26 @@ function CleaningRecordFormDialog({
           </div>
 
           <div className="space-y-2">
-            <label className="text-xs font-medium text-slate-700">Status</label>
-            <Popover open={statusOpen} onOpenChange={setStatusOpen}>
-              <div className="relative">
-                <PopoverTrigger
-                  onClick={() => setStatusOpen((current) => !current)}
-                  className="flex h-9 w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 text-left text-xs text-slate-700 transition hover:bg-slate-100"
-                >
-                  <span>{statusLabels[form.status]}</span>
-                  <span className="text-slate-400">▾</span>
-                </PopoverTrigger>
-
-                <PopoverContent className="min-w-[220px] p-1" align="start" sideOffset={6}>
-                  {(['PENDING', 'VERIFIED'] as CleaningRecordStatus[]).map((status) => (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() => {
-                        setForm((current) => ({ ...current, status }))
-                        setStatusOpen(false)
-                      }}
-                      className={[
-                        'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs transition',
-                        form.status === status
-                          ? 'bg-slate-900 text-white'
-                          : 'text-slate-700 hover:bg-slate-100',
-                      ].join(' ')}
-                    >
-                      <span>{statusLabels[status]}</span>
-                      {form.status === status ? <span>✓</span> : null}
-                    </button>
-                  ))}
-                </PopoverContent>
-              </div>
-            </Popover>
+            <label htmlFor="cleaning-status" className="text-xs font-medium text-slate-700">
+              Status
+            </label>
+            <select
+              id="cleaning-status"
+              value={form.status}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  status: event.target.value as CleaningRecordStatus,
+                }))
+              }
+              className="h-9 w-full rounded-md border border-slate-200 bg-slate-50 px-3 text-xs text-slate-700 focus:border-slate-300 focus:outline-none"
+            >
+              {(['PENDING', 'VERIFIED'] as CleaningRecordStatus[]).map((status) => (
+                <option key={status} value={status}>
+                  {statusLabels[status]}
+                </option>
+              ))}
+            </select>
           </div>
 
           <DialogFooter>

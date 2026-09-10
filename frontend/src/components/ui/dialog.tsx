@@ -28,7 +28,7 @@ function Dialog({ open, onOpenChange, children }: DialogProps) {
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4 isolate">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8 isolate">
       <DialogOverlay onOpenChange={onOpenChange} />
       {children}
     </div>,
@@ -60,7 +60,7 @@ function DialogContent({
       aria-modal="true"
       style={{ width: '480px', maxWidth: 'calc(100vw - 2rem)' }}
       className={[
-        'relative z-10 flex-none rounded-xl border border-slate-200 bg-white p-5 shadow-2xl',
+        'relative z-10 flex-none max-h-[calc(100vh-4rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 shadow-2xl',
         className ?? '',
       ].join(' ')}
     >

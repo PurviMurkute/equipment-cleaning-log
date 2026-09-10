@@ -156,6 +156,7 @@ const CleaningRecordsPage = () => {
       method: payload.method,
       notes: payload.notes.trim() === '' ? undefined : payload.notes.trim(),
       status: payload.status,
+      changedBy: payload.changedBy.trim(),
     })
     setSelectedEquipmentId(payload.equipmentId)
   }
@@ -171,6 +172,7 @@ const CleaningRecordsPage = () => {
       method: payload.method,
       notes: payload.notes.trim() === '' ? null : payload.notes.trim(),
       status: payload.status,
+      changedBy: payload.changedBy.trim(),
     })
 
     setEditOpen(false)
@@ -181,6 +183,7 @@ const CleaningRecordsPage = () => {
     ? {
         equipmentId: editingRecord.equipmentId,
         cleanedBy: editingRecord.cleanedBy,
+        changedBy: '',
         cleanedAt: toDatetimeLocal(editingRecord.cleanedAt),
         method: editingRecord.method,
         notes: editingRecord.notes ?? '',
@@ -225,7 +228,6 @@ const CleaningRecordsPage = () => {
           />
           <AddCleaningRecordDialog
             equipmentOptions={equipmentOptions}
-            defaultEquipmentId={selectedEquipmentId || equipmentList[0]?.id}
             onCreate={handleCreate}
           />
         </div>
